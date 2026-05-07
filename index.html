@@ -734,10 +734,10 @@
     <div class="form-group">
       <label class="form-label">Patient</label>
       <select class="form-select" id="ordPatient">
-        <option value="lou">Lou — né(e) le 04/04/2021</option>
-        <option value="timeo">Timéo — né(e) le 21/04/2022</option>
-        <option value="charlotte">Charlotte — née le 29/09/1989</option>
-        <option value="julien">Julien — né(e) le 04/12/1987</option>
+        <option value="lou">Lou FAUGERE — née le 04/04/2021</option>
+        <option value="timeo">Timéo FAUGERE — né le 21/04/2022</option>
+        <option value="charlotte">Charlotte FAUGERE — née le 29/09/1989</option>
+        <option value="julien">Julien FAUGERE — né le 04/12/1987</option>
       </select>
     </div>
     <div class="form-group">
@@ -1412,15 +1412,20 @@ function showPrescResult(symp, meds, memberName, advice) {
 
 function prefillOrdonnance(text) {
   document.getElementById('ordMeds').value = text;
-  switchTab('prescription', document.querySelectorAll('.tab-btn')[4]);
-  document.getElementById('mainFab').style.display = 'none';
-  document.querySelector('.card:last-child').scrollIntoView({ behavior: 'smooth' });
+  if (currentTab !== 'prescription') {
+    switchTab('prescription', document.querySelectorAll('.tab-btn')[4]);
+    document.getElementById('mainFab').style.display = 'none';
+  }
+  setTimeout(() => {
+    const ordCard = document.getElementById('ordMeds').closest('.card');
+    if (ordCard) ordCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 150);
 }
 
 // ==================== ORDONNANCE PDF ====================
 async function generateOrdonnancePDF() {
   const patientKey = document.getElementById('ordPatient').value;
-  const patientInfo = { lou: 'Lou — née le 04/04/2021', timeo: 'Timéo — né le 21/04/2022', charlotte: 'Charlotte — née le 29/09/1989', julien: 'Julien — né le 04/12/1987' };
+  const patientInfo = { lou: 'Lou FAUGERE — née le 04/04/2021', timeo: 'Timéo FAUGERE — né le 21/04/2022', charlotte: 'Charlotte FAUGERE — née le 29/09/1989', julien: 'Julien FAUGERE — né le 04/12/1987' };
   const meds = document.getElementById('ordMeds').value;
   const notes = document.getElementById('ordNotes').value;
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
@@ -1448,15 +1453,12 @@ async function generateOrdonnancePDF() {
     .meds-block { border-left:3px solid #7A9E7E; padding-left:18px; margin-bottom:24px; }
     .med-line { font-size:14px; margin-bottom:10px; line-height:1.7; white-space:pre-wrap; }
     .notes-block { font-size:13px; color:#4D5E6C; font-style:italic; margin-top:16px; line-height:1.7; }
-    .footer { margin-top:48px; display:flex; justify-content:space-between; align-items:flex-end; }
+    .footer { margin-top:48px; display:flex; justify-content:flex-end; align-items:flex-end; }
     .signature-block { text-align:center; }
     .sig-line { width:160px; border-bottom:1.5px solid #1C2B3A; margin:30px auto 6px; }
     .sig-name { font-size:11px; color:#7A8490; }
-    .legal { font-size:9px; color:#B0B8C1; max-width:200px; line-height:1.5; }
-    .watermark { position:fixed; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-35deg); font-size:90px; color:rgba(122,158,126,0.06); font-family:'Libre Baskerville',serif; pointer-events:none; z-index:-1; white-space:nowrap; }
     @media print { body { padding:20px 30px 40px; } }
   </style></head><body>
-  <div class="watermark">MySanté</div>
   <div class="header">
     <div class="doctor-block">
       <div class="doctor-name">Docteur PUJOL Alain</div>
@@ -1488,7 +1490,6 @@ async function generateOrdonnancePDF() {
   ${notes ? `<div class="notes-block">📌 ${notes}</div>` : ''}
 
   <div class="footer">
-    <div class="legal">Document généré via MySanté.<br>À valider par un médecin habilité.</div>
     <div class="signature-block">
       <div class="sig-line"></div>
       <div class="sig-name">Dr PUJOL Alain</div>
