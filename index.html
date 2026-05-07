@@ -863,6 +863,11 @@
       </select>
     </div>
     <div class="form-group">
+      <label class="form-label">📅 À planifier avant le</label>
+      <input class="form-input" id="rappelDate" type="date">
+      <div style="font-size:11px;color:var(--text-light);margin-top:5px;">Laissez vide si pas de délai précis</div>
+    </div>
+    <div class="form-group">
       <label class="form-label">Note</label>
       <input class="form-input" id="rappelNote" placeholder="Précision...">
     </div>
@@ -1254,21 +1259,59 @@ function deleteAppt(fbKey) {
 
 // ==================== RAPPELS ====================
 function renderRappels() {
-  const list = document.getElementById('rappelsList');
-  let rappels = data.rappels.filter(r => currentMember === 'all' || r.member === currentMember);
-  if (!rappels.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-text">Aucun rappel</div></div>`; return; }
-  list.innerHTML = rappels.map(r => `
-    <div class="rappel-item">
-      <div class="rappel-check ${r.done ? 'done' : ''}" onclick="toggleRappel('${r._fbKey}')">
-        ${r.done ? '<span style="color:white;font-size:12px;">✓</span>' : ''}
-      </div>
-      <div class="rappel-info">
-        <div class="rappel-title ${r.done ? 'done' : ''}">${r.title}</div>
-        <div class="rappel-meta">${memberLabel(r.member)}${r.note ? ' · ' + r.note : ''}</div>
-        ${r.urgency === 'urgent' ? '<span class="rappel-urgent">🔴 Urgent</span>' : r.urgency === 'bientot' ? '<span class="rappel-urgent" style="background:#FFF3E0;color:#E65100;">🟠 Bientôt</span>' : ''}
-      </div>
-      <button class="btn btn-danger btn-sm" onclick="deleteRappel('${r._fbKey}')">✕</button>
-    </div>`).join('');
+  var list = document.getElementById('rappelsList');
+  var rappels = data.rappels.filter(function(r) {
+    return currentMember === 'all' || r.member === currentMember;
+  });
+  if (!rappels.length) {
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><div class="empty-text">Aucun rappel</div></div>';
+    return;
+  }
+  var html = '';
+  rappels.forEach(function(r) {
+    var planBadge = '';
+    if (r.planDate) {
+      var pd = new Date(r.planDate + 'T00:00:00');
+      var today2 = new Date(); today2.setHours(0,0,0,0);
+      var diffDays = Math.round((pd - today2) / 86400000);
+      var label = pd.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+      var color = '#1565C0'; var bg = '#E3F2FD'; var prefix = '📅';
+      if (diffDays < 0)        { color = '#B71C1C'; bg = '#FFEBEE'; prefix = '⚠️ En retard —'; }
+      else if (diffDays === 0) { color = '#E65100'; bg = '#FFF3E0'; prefix = '⏰ Aujourd’hui —'; }
+      else if (diffDays <= 7)  { color = '#E65100'; bg = '#FFF3E0'; prefix = '📅 Dans ' + diffDays + 'j —'; }
+      planBadge = '<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;'
+        + 'color:' + color + ';background:' + bg + ';padding:3px 9px;border-radius:10px;margin-top:5px;">'
+        + prefix + ' ' + label + '</span>';
+    }
+    var urgBadge = '';
+    if (r.urgency === 'urgent') urgBadge = '<span class="rappel-urgent">🔴 Urgent</span>';
+    else if (r.urgency === 'bientot') urgBadge = '<span class="rappel-urgent" style="background:#FFF3E0;color:#E65100;">🟠 Bient&#244;t</span>';
+
+    var checkInner = r.done ? '<span style="color:white;font-size:12px;">&#10003;</span>' : '';
+    var fbk = (r._fbKey || '').replace(/"/g, '');
+    var doneClass = r.done ? ' done' : '';
+
+    html += '<div class="rappel-item" data-fbkey="' + fbk + '">';
+    html += '<div class="rappel-check' + doneClass + '" data-action="toggle">' + checkInner + '</div>';
+    html += '<div class="rappel-info">';
+    html += '<div class="rappel-title' + doneClass + '">' + (r.title || '') + '</div>';
+    html += '<div class="rappel-meta">' + memberLabel(r.member) + (r.note ? ' &middot; ' + r.note : '') + '</div>';
+    html += planBadge;
+    html += urgBadge;
+    html += '</div>';
+    html += '<button class="btn btn-danger btn-sm" data-action="delete">&#10005;</button>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+
+  // Attach events via delegation (avoids any quote-in-onclick issues)
+  list.querySelectorAll('.rappel-item').forEach(function(item) {
+    var key = item.dataset.fbkey;
+    var toggleBtn = item.querySelector('[data-action="toggle"]');
+    var deleteBtn = item.querySelector('[data-action="delete"]');
+    if (toggleBtn) toggleBtn.addEventListener('click', function() { toggleRappel(key); });
+    if (deleteBtn) deleteBtn.addEventListener('click', function() { deleteRappel(key); });
+  });
 }
 
 function toggleRappel(fbKey) {
@@ -1279,10 +1322,18 @@ function deleteRappel(fbKey) {
   fbDeleteRappel(fbKey);
 }
 function addRappel() {
-  const r = { title: document.getElementById('rappelTitle').value || 'Rappel', member: document.getElementById('rappelMember').value, urgency: document.getElementById('rappelUrgency').value, note: document.getElementById('rappelNote').value, done: false };
+  const rappelDateVal = document.getElementById('rappelDate').value;
+  const r = {
+    title: document.getElementById('rappelTitle').value || 'Rappel',
+    member: document.getElementById('rappelMember').value,
+    urgency: document.getElementById('rappelUrgency').value,
+    planDate: rappelDateVal || '',
+    note: document.getElementById('rappelNote').value,
+    done: false
+  };
   fbAddRappel(r);
   closeModal('modalRappel');
-  ['rappelTitle','rappelNote'].forEach(id => document.getElementById(id).value = '');
+  ['rappelTitle','rappelNote','rappelDate'].forEach(id => document.getElementById(id).value = '');
 }
 
 // ==================== CONTACTS ====================
@@ -1582,83 +1633,82 @@ function prefillOrdonnance(text) {
 // ==================== ORDONNANCE PDF ====================
 async function generateOrdonnancePDF() {
   const patientKey = document.getElementById('ordPatient').value;
-  const patientInfo = { lou: 'Lou FAUGERE — née le 04/04/2021', timeo: 'Timéo FAUGERE — né le 21/04/2022', charlotte: 'Charlotte FAUGERE — née le 29/09/1989', julien: 'Julien FAUGERE — né le 04/12/1987' };
+  const patientInfo = {
+    lou: 'Lou FAUGERE — née le 04/04/2021',
+    timeo: 'Timéo FAUGERE — né le 21/04/2022',
+    charlotte: 'Charlotte FAUGERE — née le 29/09/1989',
+    julien: 'Julien FAUGERE — né le 04/12/1987'
+  };
   const meds = document.getElementById('ordMeds').value;
   const notes = document.getElementById('ordNotes').value;
   const today = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
 
   if (!meds.trim()) { alert('Veuillez saisir les médicaments à prescrire'); return; }
 
-  // Generate HTML for print / PDF
-  const printContent = `<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600&display=swap');
-    * { margin:0; padding:0; box-sizing:border-box; }
-    body { font-family:'Source Sans 3', sans-serif; color:#1C2B3A; background:white; max-width:600px; margin:0 auto; padding:40px 40px 60px; }
-    .header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #1C2B3A; padding-bottom:20px; margin-bottom:24px; }
-    .doctor-block {}
-    .doctor-name { font-family:'Libre Baskerville', serif; font-size:20px; font-weight:700; color:#1C2B3A; }
-    .doctor-title { font-size:11.5px; color:#4D5E6C; margin-top:4px; line-height:1.6; }
-    .rpps { font-size:10px; color:#7A8490; margin-top:8px; font-style:italic; }
-    .top-right { text-align:right; font-size:13px; }
-    .date-label { color:#7A8490; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }
-    .date-val { font-family:'Libre Baskerville', serif; font-size:14px; margin-top:2px; }
-    .patient-block { background:#F5F7FA; border-radius:8px; padding:14px 18px; margin-bottom:24px; }
-    .patient-label { font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#7A8490; margin-bottom:3px; }
-    .patient-name { font-size:15px; font-weight:600; }
-    .rx-title { font-family:'Libre Baskerville', serif; font-size:32px; color:#7A9E7E; letter-spacing:-1px; margin-bottom:18px; }
-    .meds-block { border-left:3px solid #7A9E7E; padding-left:18px; margin-bottom:24px; }
-    .med-line { font-size:14px; margin-bottom:10px; line-height:1.7; white-space:pre-wrap; }
-    .notes-block { font-size:13px; color:#4D5E6C; font-style:italic; margin-top:16px; line-height:1.7; }
-    .footer { margin-top:48px; display:flex; justify-content:flex-end; align-items:flex-end; }
-    .signature-block { text-align:center; }
-    .sig-line { width:160px; border-bottom:1.5px solid #1C2B3A; margin:30px auto 6px; }
-    .sig-name { font-size:11px; color:#7A8490; }
-    @media print { body { padding:20px 30px 40px; } }
-  </style></head><body>
-  <div class="header">
-    <div class="doctor-block">
-      <div class="doctor-name">Docteur PUJOL Alain</div>
-      <div class="doctor-title">
-        DES de Radiodiagnostic et d'Imagerie Médicale<br>
-        Ancien Spécialiste des Hôpitaux des Armées<br>
-        Médecin retraité
-      </div>
-      <div class="rpps">N° RPPS : 10003247029</div>
-    </div>
-    <div class="top-right">
-      <div class="date-label">Le</div>
-      <div class="date-val">${today}</div>
-      <div style="margin-top:8px;font-size:11px;color:#7A8490;">AG</div>
-    </div>
-  </div>
+  const medLines = meds.split('\n').filter(function(l) { return l.trim(); })
+    .map(function(l) { return '<div class="med-line">• ' + l.trim() + '</div>'; }).join('');
 
-  <div class="patient-block">
-    <div class="patient-label">Patient</div>
-    <div class="patient-name">${patientInfo[patientKey]}</div>
-  </div>
+  const notesBlock = notes ? '<div class="notes-block">📌 ' + notes + '</div>' : '';
 
-  <div class="rx-title">Prescription</div>
-
-  <div class="meds-block">
-    ${meds.split('\n').filter(l=>l.trim()).map(l => `<div class="med-line">• ${l.trim()}</div>`).join('')}
-  </div>
-
-  ${notes ? `<div class="notes-block">📌 ${notes}</div>` : ''}
-
-  <div class="footer">
-    <div class="signature-block">
-      <div class="sig-line"></div>
-      <div class="sig-name">Dr PUJOL Alain</div>
-    </div>
-  </div>
-  <script>window.print();<\/script>
-  </body></html>`;
+  const printContent = '<!DOCTYPE html><html lang="fr"><head><meta charset="UTF-8">'
+    + '<style>'
+    + '@import url("https://fonts.googleapis.com/css2?family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Source+Sans+3:wght@300;400;600&display=swap");'
+    + '* { margin:0; padding:0; box-sizing:border-box; }'
+    + 'body { font-family:"Source Sans 3", sans-serif; color:#1C2B3A; background:white; max-width:600px; margin:0 auto; padding:40px 40px 60px; }'
+    + '.header { display:flex; justify-content:space-between; align-items:flex-start; border-bottom:3px solid #1C2B3A; padding-bottom:20px; margin-bottom:24px; }'
+    + '.doctor-name { font-family:"Libre Baskerville", serif; font-size:20px; font-weight:700; color:#1C2B3A; }'
+    + '.doctor-title { font-size:11.5px; color:#4D5E6C; margin-top:4px; line-height:1.6; }'
+    + '.rpps { font-size:10px; color:#7A8490; margin-top:8px; font-style:italic; }'
+    + '.top-right { text-align:right; font-size:13px; }'
+    + '.date-label { color:#7A8490; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }'
+    + '.date-val { font-family:"Libre Baskerville", serif; font-size:14px; margin-top:2px; }'
+    + '.patient-block { background:#F5F7FA; border-radius:8px; padding:14px 18px; margin-bottom:24px; }'
+    + '.patient-label { font-size:10px; text-transform:uppercase; letter-spacing:0.8px; color:#7A8490; margin-bottom:3px; }'
+    + '.patient-name { font-size:15px; font-weight:600; }'
+    + '.rx-title { font-family:"Libre Baskerville", serif; font-size:32px; color:#7A9E7E; letter-spacing:-1px; margin-bottom:18px; }'
+    + '.meds-block { border-left:3px solid #7A9E7E; padding-left:18px; margin-bottom:24px; }'
+    + '.med-line { font-size:14px; margin-bottom:10px; line-height:1.7; white-space:pre-wrap; }'
+    + '.notes-block { font-size:13px; color:#4D5E6C; font-style:italic; margin-top:16px; line-height:1.7; }'
+    + '.footer { margin-top:48px; display:flex; justify-content:flex-end; align-items:flex-end; }'
+    + '.signature-block { text-align:center; }'
+    + '.sig-line { width:160px; border-bottom:1.5px solid #1C2B3A; margin:30px auto 6px; }'
+    + '.sig-name { font-size:11px; color:#7A8490; }'
+    + '@media print { body { padding:20px 30px 40px; } }'
+    + '</style></head><body>'
+    + '<div class="header">'
+    +   '<div class="doctor-block">'
+    +     '<div class="doctor-name">Docteur PUJOL Alain</div>'
+    +     '<div class="doctor-title">DES de Radiodiagnostic et d&#39;Imagerie Médicale<br>Ancien Spécialiste des Hôpitaux des Armées<br>Médecin retraité</div>'
+    +     '<div class="rpps">N° RPPS : 10003247029</div>'
+    +   '</div>'
+    +   '<div class="top-right">'
+    +     '<div class="date-label">Le</div>'
+    +     '<div class="date-val">' + today + '</div>'
+    +     '<div style="margin-top:8px;font-size:11px;color:#7A8490;">AG</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div class="patient-block">'
+    +   '<div class="patient-label">Patient</div>'
+    +   '<div class="patient-name">' + patientInfo[patientKey] + '</div>'
+    + '</div>'
+    + '<div class="rx-title">Prescription</div>'
+    + '<div class="meds-block">' + medLines + '</div>'
+    + notesBlock
+    + '<div class="footer">'
+    +   '<div class="signature-block">'
+    +     '<div class="sig-line"></div>'
+    +     '<div class="sig-name">Dr PUJOL Alain</div>'
+    +   '</div>'
+    + '</div>'
+    + '<script>window.print();<\/script>'
+    + '</body></html>';
 
   const w = window.open('', '_blank');
+  if (!w) { alert('Veuillez autoriser les pop-ups pour générer l’ordonnance.'); return; }
   w.document.write(printContent);
   w.document.close();
 }
+
 
 // ==================== DICTATION ====================
 let recognition = null;
@@ -1666,7 +1716,7 @@ let isDictating = false;
 
 function toggleDictation() {
   if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    alert('La dictée vocale n\'est pas supportée par votre navigateur. Utilisez Chrome ou Safari.');
+    alert('La dictée vocale n’est pas supportée par votre navigateur. Utilisez Chrome ou Safari.');
     return;
   }
   if (isDictating) {
