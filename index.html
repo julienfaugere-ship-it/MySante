@@ -949,8 +949,9 @@
       <textarea class="form-textarea" id="suiviNotes" placeholder="Observations, remarques du médecin..."></textarea>
     </div>
     <div class="gap-8">
+      <input type="hidden" id="suiviEditKey" value="">
       <button class="btn btn-outline btn-full" onclick="closeModal('modalSuivi')">Annuler</button>
-      <button class="btn btn-primary btn-full" onclick="addVisite()">Ajouter</button>
+      <button class="btn btn-primary btn-full" id="suiviSaveBtn" onclick="saveVisite()">Ajouter</button>
     </div>
   </div>
 </div>
@@ -1033,7 +1034,9 @@ function fbDeleteRappel(k)      { return db.ref('rappels/' + k).remove(); }
 function fbUpdateRappel(k, upd) { return db.ref('rappels/' + k).update(upd); }
 function fbAddContact(c)        { return db.ref('contacts').push(c); }
 function fbDeleteContact(k)     { return db.ref('contacts/' + k).remove(); }
-function fbAddVisite(patient,v) { return db.ref('visites/' + patient).push(v); }
+function fbAddVisite(patient,v)          { return db.ref('visites/' + patient).push(v); }
+function fbUpdateVisite(patient,key,v)   { return db.ref('visites/' + patient + '/' + key).update(v); }
+function fbDeleteVisite(patient,key)     { return db.ref('visites/' + patient + '/' + key).remove(); }
 function fbClearAllVisites() {
   return Promise.all(['lou','timeo','charlotte','julien'].map(function(p) {
     return db.ref('visites/' + p).remove();
@@ -1340,68 +1343,94 @@ function getAge(dob, refDate = new Date()) {
 }
 
 function renderSuivi() {
-  const p = currentPatient;
-  const m = members[p];
-  const visites = data.visites[p] || [];
-  const isChild = p === 'lou' || p === 'timeo';
-  const container = document.getElementById('suiviContent');
+  var p = currentPatient;
+  var m = members[p];
+  var visites = data.visites[p] || [];
+  var container = document.getElementById('suiviContent');
 
-  const last = visites[visites.length - 1];
-  const statsHTML = last ? `
-    <div class="stat-row">
-      <div class="stat-box">
-        <div class="stat-value">${last.poids}</div>
-        <div class="stat-unit">kg</div>
-        <div class="stat-label">Dernier poids</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value">${last.taille}</div>
-        <div class="stat-unit">cm</div>
-        <div class="stat-label">Dernière taille</div>
-      </div>
-    </div>` : '';
+  var last = visites[visites.length - 1];
+  var statsHTML = '';
+  if (last) {
+    statsHTML = '<div class="stat-row">'
+      + '<div class="stat-box"><div class="stat-value">' + (last.poids || '—') + '</div><div class="stat-unit">kg</div><div class="stat-label">Dernier poids</div></div>'
+      + '<div class="stat-box"><div class="stat-value">' + (last.taille || '—') + '</div><div class="stat-unit">cm</div><div class="stat-label">Dernière taille</div></div>'
+      + '</div>';
+  }
 
-  // Chart data
-  const chartData = visites.map(v => ({ date: v.date, poids: v.poids, taille: v.taille, label: new Date(v.date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) }));
+  var chartData = visites.map(function(v) {
+    return { date: v.date, poids: v.poids, taille: v.taille, label: new Date(v.date).toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' }) };
+  });
 
-  container.innerHTML = `
-    <div class="card">
-      <div class="card-header">
-        <div>
-          <div class="card-title" style="color:${m.color}">${m.name}</div>
-          ${m.dob ? `<div style="font-size:12px;color:var(--text-light);">Né(e) le ${new Date(m.dob).toLocaleDateString('fr-FR')} · ${getAge(m.dob)}</div>` : ''}
-        </div>
-        <span class="badge" style="background:${m.bg};color:${m.color};">${visites.length} visites</span>
-      </div>
-      ${statsHTML}
-      ${visites.length > 1 ? `
-      <div class="chart-tabs">
-        <button class="chart-tab ${chartType==='poids'?'active':''}" onclick="switchChart('poids', this)">📊 Poids</button>
-        <button class="chart-tab ${chartType==='taille'?'active':''}" onclick="switchChart('taille', this)">📏 Taille</button>
-      </div>
-      <div class="chart-container">
-        <canvas id="growthChart"></canvas>
-      </div>` : ''}
-    </div>
+  var dobLine = m.dob ? '<div style="font-size:12px;color:var(--text-light);">Né(e) le ' + new Date(m.dob).toLocaleDateString('fr-FR') + ' · ' + getAge(m.dob) + '</div>' : '';
+  var chartSection = '';
+  if (visites.length > 1) {
+    chartSection = '<div class="chart-tabs">'
+      + '<button class="chart-tab ' + (chartType==='poids'?'active':'') + '" onclick="switchChart(&quot;poids&quot;, this)">📊 Poids</button>'
+      + '<button class="chart-tab ' + (chartType==='taille'?'active':'') + '" onclick="switchChart(&quot;taille&quot;, this)">📏 Taille</button>'
+      + '</div><div class="chart-container"><canvas id="growthChart"></canvas></div>';
+  }
 
-    <div class="card">
-      <div class="card-header">
-        <div class="card-title">Historique des visites</div>
-        <button class="btn btn-sm btn-primary" onclick="openSuiviModal()">＋ Visite</button>
-      </div>
-      ${visites.length ? visites.slice().reverse().map(v => `
-        <div class="visit-row">
-          <div class="visit-date">${new Date(v.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' })}</div>
-          <div class="visit-data">
-            <div class="visit-title">${v.type}</div>
-            <div class="visit-metrics">${v.poids ? `⚖️ ${v.poids}kg` : ''} ${v.taille ? `📏 ${v.taille}cm` : ''}</div>
-            ${v.notes ? `<div style="font-size:11px;color:var(--text-light);margin-top:3px;">${v.notes}</div>` : ''}
-          </div>
-        </div>`).join('') : '<div class="empty-state" style="padding:20px;"><div class="empty-text">Aucune visite enregistrée</div></div>'}
-    </div>`;
+  // Build visit rows
+  var visitRows = '';
+  if (visites.length) {
+    visites.slice().reverse().forEach(function(v) {
+      var fbk = (v._fbKey || '').replace(/"/g, '');
+      var dateLabel = new Date(v.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: '2-digit' });
+      var metrics = (v.poids ? '⚖️ ' + v.poids + 'kg ' : '') + (v.taille ? '📏 ' + v.taille + 'cm' : '');
+      var noteLine = v.notes ? '<div style="font-size:11px;color:var(--text-light);margin-top:3px;">' + v.notes + '</div>' : '';
+      visitRows += '<div class="visit-row" style="align-items:center;">'
+        + '<div class="visit-date">' + dateLabel + '</div>'
+        + '<div class="visit-data" style="flex:1;">'
+        +   '<div class="visit-title">' + (v.type || '') + '</div>'
+        +   '<div class="visit-metrics">' + metrics + '</div>'
+        +   noteLine
+        + '</div>'
+        + '<div style="display:flex;gap:6px;flex-shrink:0;">'
+        +   '<button class="btn btn-sm btn-outline" data-action="edit-visit" data-fbkey="' + fbk + '" style="padding:5px 10px;font-size:13px;">✏️</button>'
+        +   '<button class="btn btn-sm btn-danger" data-action="del-visit" data-fbkey="' + fbk + '" style="padding:5px 10px;font-size:13px;">✕</button>'
+        + '</div>'
+        + '</div>';
+    });
+  } else {
+    visitRows = '<div class="empty-state" style="padding:20px;"><div class="empty-text">Aucune visite enregistrée</div></div>';
+  }
 
-  if (visites.length > 1) setTimeout(() => drawChart(chartData), 100);
+  container.innerHTML = '<div class="card">'
+    + '<div class="card-header"><div>'
+    +   '<div class="card-title" style="color:' + m.color + '">' + m.name + '</div>'
+    +   dobLine
+    + '</div>'
+    + '<span class="badge" style="background:' + m.bg + ';color:' + m.color + ';">' + visites.length + ' visites</span>'
+    + '</div>'
+    + statsHTML
+    + chartSection
+    + '</div>'
+    + '<div class="card">'
+    +   '<div class="card-header">'
+    +     '<div class="card-title">Historique des visites</div>'
+    +     '<button class="btn btn-sm btn-primary" onclick="openSuiviModal()">＋ Visite</button>'
+    +   '</div>'
+    +   visitRows
+    + '</div>';
+
+  // Event delegation for edit / delete buttons
+  var suiviDiv = document.getElementById('suiviContent');
+  suiviDiv.addEventListener('click', function handler(e) {
+    var btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    var key = btn.dataset.fbkey;
+    var action = btn.dataset.action;
+    if (action === 'edit-visit') {
+      openEditVisite(key);
+    } else if (action === 'del-visit') {
+      if (confirm('Supprimer cette visite ?')) fbDeleteVisite(currentPatient, key);
+    }
+    suiviDiv.removeEventListener('click', handler);
+  });
+
+  if (visites.length > 1) setTimeout(function() { drawChart(chartData); }, 100);
 }
+
 
 function drawChart(chartData) {
   const canvas = document.getElementById('growthChart');
@@ -1445,21 +1474,49 @@ function switchChart(type, btn) {
 }
 
 function openSuiviModal() {
+  // Reset to "add" mode
   document.getElementById('modalSuiviTitle').textContent = 'Nouvelle visite — ' + members[currentPatient].name;
+  document.getElementById('suiviSaveBtn').textContent = 'Ajouter';
+  document.getElementById('suiviEditKey').value = '';
+  ['suiviDate','suiviType','suiviPoids','suiviTaille','suiviNotes'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
   document.getElementById('modalSuivi').classList.add('open');
 }
 
-function addVisite() {
-  const v = {
-    date: document.getElementById('suiviDate').value || new Date().toISOString().split('T')[0],
-    type: document.getElementById('suiviType').value || 'Consultation',
-    poids: parseFloat(document.getElementById('suiviPoids').value) || null,
+function openEditVisite(fbKey) {
+  var v = (data.visites[currentPatient] || []).find(function(x) { return x._fbKey === fbKey; });
+  if (!v) return;
+  document.getElementById('modalSuiviTitle').textContent = 'Modifier la visite — ' + members[currentPatient].name;
+  document.getElementById('suiviSaveBtn').textContent = 'Enregistrer';
+  document.getElementById('suiviEditKey').value = fbKey;
+  document.getElementById('suiviDate').value  = v.date || '';
+  document.getElementById('suiviType').value  = v.type || '';
+  document.getElementById('suiviPoids').value = v.poids || '';
+  document.getElementById('suiviTaille').value = v.taille || '';
+  document.getElementById('suiviNotes').value = v.notes || '';
+  document.getElementById('modalSuivi').classList.add('open');
+}
+
+function saveVisite() {
+  var editKey = document.getElementById('suiviEditKey').value;
+  var v = {
+    date:   document.getElementById('suiviDate').value || new Date().toISOString().split('T')[0],
+    type:   document.getElementById('suiviType').value || 'Consultation',
+    poids:  parseFloat(document.getElementById('suiviPoids').value) || null,
     taille: parseFloat(document.getElementById('suiviTaille').value) || null,
-    notes: document.getElementById('suiviNotes').value,
+    notes:  document.getElementById('suiviNotes').value,
   };
-  fbAddVisite(currentPatient, v);
+  if (editKey) {
+    fbUpdateVisite(currentPatient, editKey, v);
+  } else {
+    fbAddVisite(currentPatient, v);
+  }
   closeModal('modalSuivi');
-  ['suiviDate','suiviType','suiviPoids','suiviTaille','suiviNotes'].forEach(id => document.getElementById(id).value = '');
+  ['suiviDate','suiviType','suiviPoids','suiviTaille','suiviNotes'].forEach(function(id) {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('suiviEditKey').value = '';
 }
 
 // ==================== PRESCRIPTION ====================
