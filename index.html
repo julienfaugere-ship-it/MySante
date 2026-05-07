@@ -702,7 +702,12 @@
 
 <!-- ===================== SUIVI ===================== -->
 <div class="tab-content" id="tab-suivi">
-  <div class="section-title">Suivi de Santé</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+    <div class="section-title">Suivi de Santé</div>
+    <button onclick="resetAllVisites()" style="font-size:11px;padding:6px 12px;border-radius:20px;border:1.5px solid #FFCDD2;background:#FFEBEE;color:#C62828;font-family:'DM Sans',sans-serif;cursor:pointer;font-weight:600;">
+      🗑 Tout effacer
+    </button>
+  </div>
   <div class="section-sub">Évolution par patient</div>
 
   <div class="patient-selector" id="patientSelector">
@@ -1029,6 +1034,11 @@ function fbUpdateRappel(k, upd) { return db.ref('rappels/' + k).update(upd); }
 function fbAddContact(c)        { return db.ref('contacts').push(c); }
 function fbDeleteContact(k)     { return db.ref('contacts/' + k).remove(); }
 function fbAddVisite(patient,v) { return db.ref('visites/' + patient).push(v); }
+function fbClearAllVisites() {
+  return Promise.all(['lou','timeo','charlotte','julien'].map(function(p) {
+    return db.ref('visites/' + p).remove();
+  }));
+}
 
 // ── Real-time listeners ──
 function setupFirebaseListeners() {
@@ -1095,36 +1105,7 @@ function seedIfEmpty() {
     ];
     seedContacts.forEach(c => db.ref('contacts').push(c));
 
-    const seedVisites = {
-      lou: [
-        { date: '2022-04-15', type: 'Pédiatre — Naissance', poids: 3.8, taille: 51, notes: 'Naissance, tout va bien' },
-        { date: '2022-06-20', type: 'Pédiatre — 2 mois', poids: 5.2, taille: 57, notes: 'Vaccins 2 mois' },
-        { date: '2022-09-10', type: 'Pédiatre — 4 mois', poids: 6.8, taille: 63, notes: 'Vaccins 4 mois' },
-        { date: '2023-04-05', type: 'Pédiatre — 1 an', poids: 9.5, taille: 74, notes: 'Bilan 1 an, développement normal' },
-        { date: '2024-04-10', type: 'Pédiatre — 2 ans', poids: 12.1, taille: 86, notes: 'Bilan 2 ans, vocabulaire en développement' },
-        { date: '2025-04-08', type: 'Pédiatre — 3 ans', poids: 14.3, taille: 95, notes: 'Bilan 3 ans, très bien' },
-      ],
-      timeo: [
-        { date: '2022-04-21', type: 'Maternité — Naissance', poids: 3.5, taille: 49, notes: 'Naissance' },
-        { date: '2022-06-25', type: 'Pédiatre — 2 mois', poids: 4.9, taille: 56, notes: 'Vaccins 2 mois' },
-        { date: '2022-10-15', type: 'Pédiatre — 6 mois', poids: 7.2, taille: 66, notes: 'Bilan 6 mois' },
-        { date: '2023-04-22', type: 'Pédiatre — 1 an', poids: 9.1, taille: 73, notes: 'Bilan 1 an' },
-        { date: '2024-04-25', type: 'Pédiatre — 2 ans', poids: 11.8, taille: 84, notes: 'Bilan 2 ans' },
-      ],
-      charlotte: [
-        { date: '2024-01-15', type: 'Médecin traitant', poids: 62, taille: 168, notes: 'Bilan annuel, tout normal' },
-        { date: '2024-06-10', type: 'Gynécologue', poids: 62.5, taille: 168, notes: 'Contrôle annuel' },
-        { date: '2025-02-20', type: 'Médecin traitant', poids: 63, taille: 168, notes: 'Bilan sanguin OK' },
-      ],
-      julien: [
-        { date: '2023-11-05', type: 'Médecin traitant', poids: 82, taille: 178, notes: 'Tension légèrement élevée' },
-        { date: '2024-05-12', type: 'Cardiologue', poids: 81, taille: 178, notes: 'ECG normal' },
-        { date: '2025-01-15', type: 'Médecin traitant', poids: 80, taille: 178, notes: 'Suivi tension, amélioré' },
-      ],
-    };
-    Object.entries(seedVisites).forEach(([patient, visits]) => {
-      visits.forEach(v => db.ref('visites/' + patient).push(v));
-    });
+    // Suivi de santé : vide par défaut, à compléter manuellement
   });
 }
 
@@ -1805,6 +1786,16 @@ function stopDictation() {
   btn.classList.remove('dict-active');
   label.textContent = 'Dicter';
   status.style.display = 'none';
+}
+
+// ==================== RESET VISITES ====================
+function resetAllVisites() {
+  if (!confirm('Effacer toutes les visites de tous les patients ? Cette action est irréversible.')) return;
+  fbClearAllVisites().then(function() {
+    data.visites = { lou: [], timeo: [], charlotte: [], julien: [] };
+    renderSuivi();
+    alert('Suivi de santé remis à zéro.');
+  });
 }
 
 // ==================== DATE DISPLAY ====================
