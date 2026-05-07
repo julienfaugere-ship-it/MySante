@@ -6,156 +6,9 @@
 <title>MySanté</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
-<!-- Firebase -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, push, remove, onValue, update } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyC45DRJR-76uOlXrLXvccjP35mLggE-kl0",
-  authDomain: "mysante-c5fc5.firebaseapp.com",
-  databaseURL: "https://mysante-c5fc5-default-rtdb.europe-west1.firebasedatabase.app",
-  projectId: "mysante-c5fc5",
-  storageBucket: "mysante-c5fc5.firebasestorage.app",
-  messagingSenderId: "76073013863",
-  appId: "1:76073013863:web:9f9be9ad362711a4e47ac2"
-};
-
-const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
-
-// ── Expose Firebase helpers to global scope so non-module scripts can use them ──
-window._fb = { db, ref, set, push, remove, onValue, update };
-
-// ── SYNC: listen to each collection and update local data + re-render ──
-function setupListeners() {
-
-  // APPTS
-  onValue(ref(db, 'appts'), snap => {
-    const val = snap.val();
-    data.appts = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
-    renderAgenda();
-  });
-
-  // RAPPELS
-  onValue(ref(db, 'rappels'), snap => {
-    const val = snap.val();
-    data.rappels = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
-    renderRappels();
-  });
-
-  // CONTACTS
-  onValue(ref(db, 'contacts'), snap => {
-    const val = snap.val();
-    data.contacts = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
-    renderContacts();
-  });
-
-  // VISITES (nested per patient)
-  ['lou','timeo','charlotte','julien'].forEach(patient => {
-    onValue(ref(db, 'visites/' + patient), snap => {
-      const val = snap.val();
-      data.visites[patient] = val
-        ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})).sort((a,b) => new Date(a.date)-new Date(b.date))
-        : [];
-      if (currentPatient === patient) renderSuivi();
-    });
-  });
-}
-
-// ── Firebase WRITE helpers (exposed globally) ──
-window.fbAddAppt = (appt) => push(ref(db, 'appts'), appt);
-window.fbDeleteAppt = (fbKey) => remove(ref(db, 'appts/' + fbKey));
-
-window.fbAddRappel = (r) => push(ref(db, 'rappels'), r);
-window.fbDeleteRappel = (fbKey) => remove(ref(db, 'rappels/' + fbKey));
-window.fbUpdateRappel = (fbKey, data) => update(ref(db, 'rappels/' + fbKey), data);
-
-window.fbAddContact = (c) => push(ref(db, 'contacts'), c);
-window.fbDeleteContact = (fbKey) => remove(ref(db, 'contacts/' + fbKey));
-
-window.fbAddVisite = (patient, v) => push(ref(db, 'visites/' + patient), v);
-
-// ── Seed initial data only if DB is empty ──
-async function seedIfEmpty() {
-  const { get } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js");
-  const snap = await get(ref(db, 'appts'));
-  if (snap.exists()) return; // already seeded
-
-  const seedAppts = [
-    { id: Date.now()+1, title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-10', time: '10:00', member: 'lou', notes: 'Vaccin 3 ans' },
-    { id: Date.now()+2, title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-15', time: '14:30', member: 'timeo', notes: 'Contrôle annuel' },
-    { id: Date.now()+3, title: 'Dentiste', doctor: 'Dr Martin', date: '2025-07-02', time: '09:00', member: 'charlotte', notes: 'Détartrage' },
-    { id: Date.now()+4, title: 'Médecin traitant', doctor: 'Dr Pujol', date: '2025-07-18', time: '11:15', member: 'julien', notes: '' },
-  ];
-  seedAppts.forEach(a => push(ref(db, 'appts'), a));
-
-  const seedRappels = [
-    { title: 'Dentiste', member: 'lou', urgency: 'bientot', note: 'Premier rdv dentiste', done: false },
-    { title: 'Dermatologue', member: 'charlotte', urgency: 'urgent', note: 'Grain de beauté à surveiller', done: false },
-    { title: 'Ophtalmologue', member: 'julien', urgency: '', note: 'Bilan visuel annuel', done: false },
-    { title: 'Pédiatre', member: 'timeo', urgency: '', note: 'Bilan 3 ans', done: false },
-  ];
-  seedRappels.forEach(r => push(ref(db, 'rappels'), r));
-
-  const seedContacts = [
-    { name: 'Dr Leblanc', spec: 'Pédiatre', tel: '01 42 00 11 22', addr: '12 avenue Pasteur, Paris 75015', member: 'all' },
-    { name: 'Dr Martin', spec: 'Dentiste', tel: '01 43 22 55 66', addr: '5 rue de la Victoire, Paris 75009', member: 'all' },
-    { name: 'Dr Pujol Alain', spec: 'Médecin retraité — Radiodiagnostic', tel: '06 00 00 00 00', addr: '', member: 'all' },
-    { name: 'Dr Bernard', spec: 'Médecin traitant', tel: '01 45 33 77 88', addr: '28 boulevard Haussmann, Paris 75008', member: 'all' },
-  ];
-  seedContacts.forEach(c => push(ref(db, 'contacts'), c));
-
-  const seedVisites = {
-    lou: [
-      { date: '2022-04-15', type: 'Pédiatre — Naissance', poids: 3.8, taille: 51, notes: 'Naissance, tout va bien' },
-      { date: '2022-06-20', type: 'Pédiatre — 2 mois', poids: 5.2, taille: 57, notes: 'Vaccins 2 mois' },
-      { date: '2022-09-10', type: 'Pédiatre — 4 mois', poids: 6.8, taille: 63, notes: 'Vaccins 4 mois' },
-      { date: '2023-04-05', type: 'Pédiatre — 1 an', poids: 9.5, taille: 74, notes: 'Bilan 1 an, développement normal' },
-      { date: '2024-04-10', type: 'Pédiatre — 2 ans', poids: 12.1, taille: 86, notes: 'Bilan 2 ans, vocabulaire en développement' },
-      { date: '2025-04-08', type: 'Pédiatre — 3 ans', poids: 14.3, taille: 95, notes: 'Bilan 3 ans, très bien' },
-    ],
-    timeo: [
-      { date: '2022-04-21', type: 'Maternité — Naissance', poids: 3.5, taille: 49, notes: 'Naissance' },
-      { date: '2022-06-25', type: 'Pédiatre — 2 mois', poids: 4.9, taille: 56, notes: 'Vaccins 2 mois' },
-      { date: '2022-10-15', type: 'Pédiatre — 6 mois', poids: 7.2, taille: 66, notes: 'Bilan 6 mois' },
-      { date: '2023-04-22', type: 'Pédiatre — 1 an', poids: 9.1, taille: 73, notes: 'Bilan 1 an' },
-      { date: '2024-04-25', type: 'Pédiatre — 2 ans', poids: 11.8, taille: 84, notes: 'Bilan 2 ans' },
-    ],
-    charlotte: [
-      { date: '2024-01-15', type: 'Médecin traitant', poids: 62, taille: 168, notes: 'Bilan annuel, tout normal' },
-      { date: '2024-06-10', type: 'Gynécologue', poids: 62.5, taille: 168, notes: 'Contrôle annuel' },
-      { date: '2025-02-20', type: 'Médecin traitant', poids: 63, taille: 168, notes: 'Bilan sanguin OK' },
-    ],
-    julien: [
-      { date: '2023-11-05', type: 'Médecin traitant', poids: 82, taille: 178, notes: 'Tension légèrement élevée' },
-      { date: '2024-05-12', type: 'Cardiologue', poids: 81, taille: 178, notes: 'ECG normal' },
-      { date: '2025-01-15', type: 'Médecin traitant', poids: 80, taille: 178, notes: 'Suivi tension, amélioré' },
-    ],
-  };
-  Object.entries(seedVisites).forEach(([patient, visits]) => {
-    visits.forEach(v => push(ref(db, 'visites/' + patient), v));
-  });
-}
-
-// ── Boot ──
-window.addEventListener('DOMContentLoaded', () => {
-  seedIfEmpty().then(() => setupListeners());
-  // Show connection status
-  const { ref: dbRef, onValue: dbOn } = { ref, onValue };
-  import("https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js").then(({ ref: r2, onValue: ov2 }) => {
-    ov2(r2(db, '.info/connected'), snap => {
-      const connected = snap.val();
-      const dot = document.getElementById('fbStatusDot');
-      const lbl = document.getElementById('fbStatusLabel');
-      if (dot) {
-        dot.style.background = connected ? '#4CAF50' : '#EF5350';
-        if (lbl) lbl.textContent = connected ? 'Synchronisé' : 'Hors ligne';
-      }
-    });
-  });
-});
-</script>
+<!-- Firebase UMD (compatible avec scripts classiques) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
   :root {
     --cream: #FAF8F5;
@@ -1149,10 +1002,130 @@ const symptoms = [
   ]},
 ];
 
+// ==================== FIREBASE INIT ====================
+const firebaseConfig = {
+  apiKey: "AIzaSyC45DRJR-76uOlXrLXvccjP35mLggE-kl0",
+  authDomain: "mysante-c5fc5.firebaseapp.com",
+  databaseURL: "https://mysante-c5fc5-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "mysante-c5fc5",
+  storageBucket: "mysante-c5fc5.firebasestorage.app",
+  messagingSenderId: "76073013863",
+  appId: "1:76073013863:web:9f9be9ad362711a4e47ac2"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+// ── Write helpers ──
+function fbAddAppt(a)           { return db.ref('appts').push(a); }
+function fbDeleteAppt(k)        { return db.ref('appts/' + k).remove(); }
+function fbAddRappel(r)         { return db.ref('rappels').push(r); }
+function fbDeleteRappel(k)      { return db.ref('rappels/' + k).remove(); }
+function fbUpdateRappel(k, upd) { return db.ref('rappels/' + k).update(upd); }
+function fbAddContact(c)        { return db.ref('contacts').push(c); }
+function fbDeleteContact(k)     { return db.ref('contacts/' + k).remove(); }
+function fbAddVisite(patient,v) { return db.ref('visites/' + patient).push(v); }
+
+// ── Real-time listeners ──
+function setupFirebaseListeners() {
+  db.ref('appts').on('value', snap => {
+    const val = snap.val();
+    data.appts = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
+    renderAgenda();
+  });
+  db.ref('rappels').on('value', snap => {
+    const val = snap.val();
+    data.rappels = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
+    renderRappels();
+  });
+  db.ref('contacts').on('value', snap => {
+    const val = snap.val();
+    data.contacts = val ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})) : [];
+    renderContacts();
+  });
+  ['lou','timeo','charlotte','julien'].forEach(patient => {
+    db.ref('visites/' + patient).on('value', snap => {
+      const val = snap.val();
+      data.visites[patient] = val
+        ? Object.entries(val).map(([k,v]) => ({...v, _fbKey: k})).sort((a,b) => new Date(a.date)-new Date(b.date))
+        : [];
+      if (currentPatient === patient) renderSuivi();
+    });
+  });
+  // Connexion status
+  db.ref('.info/connected').on('value', snap => {
+    const dot = document.getElementById('fbStatusDot');
+    const lbl = document.getElementById('fbStatusLabel');
+    if (dot) {
+      dot.style.background = snap.val() ? '#4CAF50' : '#EF5350';
+      if (lbl) lbl.textContent = snap.val() ? 'Synchronisé' : 'Hors ligne';
+    }
+  });
+}
+
+// ── Seed demo data if DB is empty ──
+function seedIfEmpty() {
+  db.ref('appts').once('value', snap => {
+    if (snap.exists()) return;
+    const seedAppts = [
+      { title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-10', time: '10:00', member: 'lou', notes: 'Vaccin 3 ans' },
+      { title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-15', time: '14:30', member: 'timeo', notes: 'Contrôle annuel' },
+      { title: 'Dentiste', doctor: 'Dr Martin', date: '2025-07-02', time: '09:00', member: 'charlotte', notes: 'Détartrage' },
+      { title: 'Médecin traitant', doctor: 'Dr Pujol', date: '2025-07-18', time: '11:15', member: 'julien', notes: '' },
+    ];
+    seedAppts.forEach(a => db.ref('appts').push(a));
+
+    const seedRappels = [
+      { title: 'Dentiste', member: 'lou', urgency: 'bientot', note: 'Premier rdv dentiste', done: false },
+      { title: 'Dermatologue', member: 'charlotte', urgency: 'urgent', note: 'Grain de beauté à surveiller', done: false },
+      { title: 'Ophtalmologue', member: 'julien', urgency: '', note: 'Bilan visuel annuel', done: false },
+      { title: 'Pédiatre', member: 'timeo', urgency: '', note: 'Bilan 3 ans', done: false },
+    ];
+    seedRappels.forEach(r => db.ref('rappels').push(r));
+
+    const seedContacts = [
+      { name: 'Dr Leblanc', spec: 'Pédiatre', tel: '01 42 00 11 22', addr: '12 avenue Pasteur, Paris 75015', member: 'all' },
+      { name: 'Dr Martin', spec: 'Dentiste', tel: '01 43 22 55 66', addr: '5 rue de la Victoire, Paris 75009', member: 'all' },
+      { name: 'Dr Pujol Alain', spec: 'Médecin retraité — Radiodiagnostic', tel: '06 00 00 00 00', addr: '', member: 'all' },
+      { name: 'Dr Bernard', spec: 'Médecin traitant', tel: '01 45 33 77 88', addr: '28 boulevard Haussmann, Paris 75008', member: 'all' },
+    ];
+    seedContacts.forEach(c => db.ref('contacts').push(c));
+
+    const seedVisites = {
+      lou: [
+        { date: '2022-04-15', type: 'Pédiatre — Naissance', poids: 3.8, taille: 51, notes: 'Naissance, tout va bien' },
+        { date: '2022-06-20', type: 'Pédiatre — 2 mois', poids: 5.2, taille: 57, notes: 'Vaccins 2 mois' },
+        { date: '2022-09-10', type: 'Pédiatre — 4 mois', poids: 6.8, taille: 63, notes: 'Vaccins 4 mois' },
+        { date: '2023-04-05', type: 'Pédiatre — 1 an', poids: 9.5, taille: 74, notes: 'Bilan 1 an, développement normal' },
+        { date: '2024-04-10', type: 'Pédiatre — 2 ans', poids: 12.1, taille: 86, notes: 'Bilan 2 ans, vocabulaire en développement' },
+        { date: '2025-04-08', type: 'Pédiatre — 3 ans', poids: 14.3, taille: 95, notes: 'Bilan 3 ans, très bien' },
+      ],
+      timeo: [
+        { date: '2022-04-21', type: 'Maternité — Naissance', poids: 3.5, taille: 49, notes: 'Naissance' },
+        { date: '2022-06-25', type: 'Pédiatre — 2 mois', poids: 4.9, taille: 56, notes: 'Vaccins 2 mois' },
+        { date: '2022-10-15', type: 'Pédiatre — 6 mois', poids: 7.2, taille: 66, notes: 'Bilan 6 mois' },
+        { date: '2023-04-22', type: 'Pédiatre — 1 an', poids: 9.1, taille: 73, notes: 'Bilan 1 an' },
+        { date: '2024-04-25', type: 'Pédiatre — 2 ans', poids: 11.8, taille: 84, notes: 'Bilan 2 ans' },
+      ],
+      charlotte: [
+        { date: '2024-01-15', type: 'Médecin traitant', poids: 62, taille: 168, notes: 'Bilan annuel, tout normal' },
+        { date: '2024-06-10', type: 'Gynécologue', poids: 62.5, taille: 168, notes: 'Contrôle annuel' },
+        { date: '2025-02-20', type: 'Médecin traitant', poids: 63, taille: 168, notes: 'Bilan sanguin OK' },
+      ],
+      julien: [
+        { date: '2023-11-05', type: 'Médecin traitant', poids: 82, taille: 178, notes: 'Tension légèrement élevée' },
+        { date: '2024-05-12', type: 'Cardiologue', poids: 81, taille: 178, notes: 'ECG normal' },
+        { date: '2025-01-15', type: 'Médecin traitant', poids: 80, taille: 178, notes: 'Suivi tension, amélioré' },
+      ],
+    };
+    Object.entries(seedVisites).forEach(([patient, visits]) => {
+      visits.forEach(v => db.ref('visites/' + patient).push(v));
+    });
+  });
+}
+
 // ==================== INIT ====================
 window.onload = () => {
   updateHeaderDate();
-  // Compute real ages from DOBs
   function calcAge(dobStr) {
     const [y,m,d] = dobStr.split('-').map(Number);
     const t = new Date();
@@ -1170,8 +1143,10 @@ window.onload = () => {
     const el = document.getElementById('opt-' + key);
     if (el) el.textContent = info.label + ' (' + calcAge(info.dob) + ' ans)';
   });
-  renderSuivi();  // Initial render with empty data (Firebase will update)
+  renderSuivi();
   renderSymptoms();
+  seedIfEmpty();
+  setupFirebaseListeners();
 };
 
 function updateHeaderDate() {
@@ -1269,12 +1244,12 @@ function addAppt() {
     member: document.getElementById('apptMember').value,
     notes: document.getElementById('apptNotes').value,
   };
-  if (window.fbAddAppt) window.fbAddAppt(a); // Firebase write
+  fbAddAppt(a); // Firebase write
   closeModal('modalAgenda');
   ['apptTitle','apptDoctor','apptDate','apptTime','apptNotes'].forEach(id => document.getElementById(id).value = '');
 }
 function deleteAppt(fbKey) {
-  if (window.fbDeleteAppt) window.fbDeleteAppt(fbKey);
+  fbDeleteAppt(fbKey);
 }
 
 // ==================== RAPPELS ====================
@@ -1298,14 +1273,14 @@ function renderRappels() {
 
 function toggleRappel(fbKey) {
   const r = data.rappels.find(r => r._fbKey === fbKey);
-  if (r && window.fbUpdateRappel) window.fbUpdateRappel(fbKey, { done: !r.done });
+  if (r) fbUpdateRappel(fbKey, { done: !r.done });
 }
 function deleteRappel(fbKey) {
-  if (window.fbDeleteRappel) window.fbDeleteRappel(fbKey);
+  fbDeleteRappel(fbKey);
 }
 function addRappel() {
   const r = { title: document.getElementById('rappelTitle').value || 'Rappel', member: document.getElementById('rappelMember').value, urgency: document.getElementById('rappelUrgency').value, note: document.getElementById('rappelNote').value, done: false };
-  if (window.fbAddRappel) window.fbAddRappel(r);
+  fbAddRappel(r);
   closeModal('modalRappel');
   ['rappelTitle','rappelNote'].forEach(id => document.getElementById(id).value = '');
 }
@@ -1333,12 +1308,12 @@ function renderContacts() {
 }
 function addContact() {
   const c = { name: document.getElementById('contactName').value, spec: document.getElementById('contactSpec').value, tel: document.getElementById('contactTel').value, addr: document.getElementById('contactAddr').value, member: document.getElementById('contactMember').value };
-  if (window.fbAddContact) window.fbAddContact(c);
+  fbAddContact(c);
   closeModal('modalContact');
   ['contactName','contactSpec','contactTel','contactAddr'].forEach(id => document.getElementById(id).value = '');
 }
 function deleteContact(fbKey) {
-  if (window.fbDeleteContact) window.fbDeleteContact(fbKey);
+  fbDeleteContact(fbKey);
 }
 
 // ==================== SUIVI ====================
@@ -1477,7 +1452,7 @@ function addVisite() {
     taille: parseFloat(document.getElementById('suiviTaille').value) || null,
     notes: document.getElementById('suiviNotes').value,
   };
-  if (window.fbAddVisite) window.fbAddVisite(currentPatient, v);
+  fbAddVisite(currentPatient, v);
   closeModal('modalSuivi');
   ['suiviDate','suiviType','suiviPoids','suiviTaille','suiviNotes'].forEach(id => document.getElementById(id).value = '');
 }
