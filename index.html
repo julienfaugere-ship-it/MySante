@@ -1378,7 +1378,12 @@ async function generatePrescription() {
   btn.disabled = false;
 }
 
+let _lastPrescMedsText = '';
+
 function showPrescResult(symp, meds, memberName, advice) {
+  // Store meds text in a global so the button can safely retrieve it
+  _lastPrescMedsText = meds.map(m => m.name + ' — ' + m.dosage).join('\n');
+
   const r = document.getElementById('prescResult');
   r.style.display = 'block';
   r.innerHTML = `
@@ -1403,10 +1408,16 @@ function showPrescResult(symp, meds, memberName, advice) {
       <div style="font-size:11px;color:var(--text-light);margin-top:12px;padding:8px;background:#FFF8E1;border-radius:8px;">
         ℹ️ Ces informations sont indicatives. Consultez votre médecin si les symptômes persistent plus de 48h ou s'aggravent.
       </div>
-      <button class="btn btn-primary btn-full mt-12" onclick="prefillOrdonnance('${meds.map(m=>m.name+' — '+m.dosage).join('\n')}')">
+      <button class="btn btn-primary btn-full mt-12" id="btnUtiliserOrd">
         📋 Utiliser pour l'ordonnance
       </button>
     </div>`;
+
+  // Attach listener after innerHTML is set
+  document.getElementById('btnUtiliserOrd').addEventListener('click', function() {
+    prefillOrdonnance(_lastPrescMedsText);
+  });
+
   r.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
