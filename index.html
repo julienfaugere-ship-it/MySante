@@ -712,10 +712,10 @@
       <label class="form-label">Pour qui ?</label>
       <select class="form-select" id="prescMember">
         <option value="all">Sélectionner...</option>
-        <option value="lou">Lou (4 ans)</option>
-        <option value="timeo">Timéo (3 ans)</option>
-        <option value="charlotte">Charlotte (35 ans)</option>
-        <option value="julien">Julien (37 ans)</option>
+        <option value="lou" id="opt-lou"></option>
+        <option value="timeo" id="opt-timeo"></option>
+        <option value="charlotte" id="opt-charlotte"></option>
+        <option value="julien" id="opt-julien"></option>
       </select>
     </div>
     <button class="btn btn-primary btn-full mt-12" onclick="generatePrescription()" id="prescBtn">
@@ -1015,6 +1015,24 @@ const symptoms = [
 // ==================== INIT ====================
 window.onload = () => {
   updateHeaderDate();
+  // Compute real ages from DOBs
+  function calcAge(dobStr) {
+    const [y,m,d] = dobStr.split('-').map(Number);
+    const t = new Date();
+    let age = t.getFullYear() - y;
+    if (t.getMonth()+1 < m || (t.getMonth()+1 === m && t.getDate() < d)) age--;
+    return age;
+  }
+  const ageDefs = {
+    lou:      { dob: '2021-04-04', label: 'Lou' },
+    timeo:    { dob: '2022-04-21', label: 'Timéo' },
+    charlotte:{ dob: '1989-09-29', label: 'Charlotte' },
+    julien:   { dob: '1987-12-04', label: 'Julien' },
+  };
+  Object.entries(ageDefs).forEach(([key, info]) => {
+    const el = document.getElementById('opt-' + key);
+    if (el) el.textContent = info.label + ' (' + calcAge(info.dob) + ' ans)';
+  });
   renderAgenda();
   renderRappels();
   renderContacts();
@@ -1344,7 +1362,7 @@ async function generatePrescription() {
   btn.disabled = true;
 
   const symp = symptoms.find(s => s.id === selectedSymptom);
-  const memberName = { lou: 'Lou (4 ans)', timeo: 'Timéo (3 ans)', charlotte: 'Charlotte (35 ans)', julien: 'Julien (37 ans)', all: 'un adulte' }[member] || 'un patient';
+  const memberName = (document.getElementById('opt-' + member) || {}).textContent || { all: 'un patient' }[member] || member;
 
   // Filter meds for children
   const isChild = member === 'lou' || member === 'timeo';
@@ -1422,15 +1440,24 @@ function showPrescResult(symp, meds, memberName, advice) {
 }
 
 function prefillOrdonnance(text) {
-  document.getElementById('ordMeds').value = text;
-  if (currentTab !== 'prescription') {
-    switchTab('prescription', document.querySelectorAll('.tab-btn')[4]);
-    document.getElementById('mainFab').style.display = 'none';
-  }
+  // Always switch to prescription tab so the card is rendered
+  const prescTabBtn = document.querySelectorAll('.tab-btn')[4];
+  switchTab('prescription', prescTabBtn);
+  document.getElementById('mainFab').style.display = 'none';
+
   setTimeout(() => {
-    const ordCard = document.getElementById('ordMeds').closest('.card');
-    if (ordCard) ordCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, 150);
+    // Set the textarea value
+    const el = document.getElementById('ordMeds');
+    if (el) {
+      el.value = text;
+      // Sync patient selector to whoever was chosen in the symptom form
+      const prescMemberVal = document.getElementById('prescMember').value;
+      const ordPatient = document.getElementById('ordPatient');
+      if (prescMemberVal && prescMemberVal !== 'all') ordPatient.value = prescMemberVal;
+      // Scroll to the textarea
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, 100);
 }
 
 // ==================== ORDONNANCE PDF ====================
