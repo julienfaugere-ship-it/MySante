@@ -607,6 +607,16 @@
   }
 
   select option { font-family: 'DM Sans', sans-serif; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.7); }
+  }
+  .dict-active {
+    background: #FFEBEE !important;
+    border-color: #EF5350 !important;
+    color: #C62828 !important;
+  }
 </style>
 </head>
 <body>
@@ -741,8 +751,20 @@
       </select>
     </div>
     <div class="form-group">
-      <label class="form-label">Médicaments prescrits</label>
-      <textarea class="ordonnance-textarea" id="ordMeds" placeholder="Ex :&#10;Doliprane 1000mg — 1 cp matin, midi, soir pendant 5 jours&#10;Amoxicilline 500mg — 1 gél. x3/jour pendant 7 jours"></textarea>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <label class="form-label" style="margin-bottom:0;">Médicaments prescrits</label>
+        <button id="dictBtn" onclick="toggleDictation()" type="button"
+          style="display:flex;align-items:center;gap:6px;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:white;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;color:var(--text-light);cursor:pointer;transition:all 0.2s;">
+          🎤 <span id="dictLabel">Dicter</span>
+        </button>
+      </div>
+      <div style="position:relative;">
+        <textarea class="ordonnance-textarea" id="ordMeds" placeholder="Ex :&#10;Doliprane 1000mg — 1 cp matin, midi, soir pendant 5 jours&#10;Amoxicilline 500mg — 1 gél. x3/jour pendant 7 jours"></textarea>
+        <div id="dictStatus" style="display:none;position:absolute;bottom:10px;right:10px;display:none;align-items:center;gap:6px;background:rgba(220,50,50,0.9);color:white;padding:5px 12px;border-radius:20px;font-size:11px;font-weight:600;">
+          <span style="width:8px;height:8px;background:white;border-radius:50%;animation:pulse 1s infinite;display:inline-block;"></span>
+          Écoute en cours...
+        </div>
+      </div>
     </div>
     <div class="form-group">
       <label class="form-label">Posologie / Conseils</label>
@@ -1539,6 +1561,103 @@ async function generateOrdonnancePDF() {
   const w = window.open('', '_blank');
   w.document.write(printContent);
   w.document.close();
+}
+
+// ==================== DICTATION ====================
+let recognition = null;
+let isDictating = false;
+
+function toggleDictation() {
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    alert('La dictée vocale n\'est pas supportée par votre navigateur. Utilisez Chrome ou Safari.');
+    return;
+  }
+  if (isDictating) {
+    stopDictation();
+  } else {
+    startDictation();
+  }
+}
+
+function startDictation() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  recognition = new SpeechRecognition();
+  recognition.lang = 'fr-FR';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  const textarea = document.getElementById('ordMeds');
+  const btn = document.getElementById('dictBtn');
+  const label = document.getElementById('dictLabel');
+  const status = document.getElementById('dictStatus');
+
+  let baseText = textarea.value;
+  if (baseText && !baseText.endsWith('\n')) baseText += '\n';
+
+  recognition.onstart = () => {
+    isDictating = true;
+    btn.classList.add('dict-active');
+    label.textContent = 'Arrêter';
+    btn.querySelector('span') && (btn.childNodes[0].textContent = '⏹ ');
+    status.style.display = 'flex';
+  };
+
+  recognition.onresult = (event) => {
+    let interim = '';
+    let final = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const t = event.results[i][0].transcript;
+      if (event.results[i].isFinal) {
+        final += t;
+      } else {
+        interim += t;
+      }
+    }
+    if (final) {
+      // Clean up punctuation spoken aloud
+      let cleaned = final.trim();
+      cleaned = cleaned.replace(/virgule/gi, ',');
+      cleaned = cleaned.replace(/point/gi, '.');
+      cleaned = cleaned.replace(/tiret/gi, '-');
+      cleaned = cleaned.replace(/retour à la ligne/gi, '\n');
+      baseText += cleaned + '\n';
+      textarea.value = baseText;
+    } else {
+      textarea.value = baseText + interim;
+    }
+    textarea.scrollTop = textarea.scrollHeight;
+  };
+
+  recognition.onerror = (event) => {
+    if (event.error !== 'no-speech') {
+      console.warn('Speech error:', event.error);
+      stopDictation();
+    }
+  };
+
+  recognition.onend = () => {
+    if (isDictating) {
+      // Auto-restart if still dictating (handles Chrome 60s timeout)
+      recognition.start();
+    }
+  };
+
+  recognition.start();
+}
+
+function stopDictation() {
+  isDictating = false;
+  if (recognition) {
+    recognition.onend = null;
+    recognition.stop();
+    recognition = null;
+  }
+  const btn = document.getElementById('dictBtn');
+  const label = document.getElementById('dictLabel');
+  const status = document.getElementById('dictStatus');
+  btn.classList.remove('dict-active');
+  label.textContent = 'Dicter';
+  status.style.display = 'none';
 }
 
 // ==================== DATE DISPLAY ====================
