@@ -1079,34 +1079,7 @@ function setupFirebaseListeners() {
 
 // ── Seed demo data if DB is empty ──
 function seedIfEmpty() {
-  db.ref('appts').once('value', snap => {
-    if (snap.exists()) return;
-    const seedAppts = [
-      { title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-10', time: '10:00', member: 'lou', notes: 'Vaccin 3 ans' },
-      { title: 'Pédiatre', doctor: 'Dr Leblanc', date: '2025-06-15', time: '14:30', member: 'timeo', notes: 'Contrôle annuel' },
-      { title: 'Dentiste', doctor: 'Dr Martin', date: '2025-07-02', time: '09:00', member: 'charlotte', notes: 'Détartrage' },
-      { title: 'Médecin traitant', doctor: 'Dr Pujol', date: '2025-07-18', time: '11:15', member: 'julien', notes: '' },
-    ];
-    seedAppts.forEach(a => db.ref('appts').push(a));
-
-    const seedRappels = [
-      { title: 'Dentiste', member: 'lou', urgency: 'bientot', note: 'Premier rdv dentiste', done: false },
-      { title: 'Dermatologue', member: 'charlotte', urgency: 'urgent', note: 'Grain de beauté à surveiller', done: false },
-      { title: 'Ophtalmologue', member: 'julien', urgency: '', note: 'Bilan visuel annuel', done: false },
-      { title: 'Pédiatre', member: 'timeo', urgency: '', note: 'Bilan 3 ans', done: false },
-    ];
-    seedRappels.forEach(r => db.ref('rappels').push(r));
-
-    const seedContacts = [
-      { name: 'Dr Leblanc', spec: 'Pédiatre', tel: '01 42 00 11 22', addr: '12 avenue Pasteur, Paris 75015', member: 'all' },
-      { name: 'Dr Martin', spec: 'Dentiste', tel: '01 43 22 55 66', addr: '5 rue de la Victoire, Paris 75009', member: 'all' },
-      { name: 'Dr Pujol Alain', spec: 'Médecin retraité — Radiodiagnostic', tel: '06 00 00 00 00', addr: '', member: 'all' },
-      { name: 'Dr Bernard', spec: 'Médecin traitant', tel: '01 45 33 77 88', addr: '28 boulevard Haussmann, Paris 75008', member: 'all' },
-    ];
-    seedContacts.forEach(c => db.ref('contacts').push(c));
-
-    // Suivi de santé : vide par défaut, à compléter manuellement
-  });
+  // Aucune donnée de démonstration — base vide par défaut
 }
 
 // ==================== INIT ====================
